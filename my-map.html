@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>天童市観光ルート案内マップ</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; font-family: "Yu Mincho", "Hiragino Mincho Pro", serif; }
+    #map { height: 100%; width: 100%; }
+    #sidebar {
+      position: absolute;
+      top: 0; left: 0;
+      width: 280px;
+      height: 100%;
+      background: #fdfaf5 url("https://www.transparenttextures.com/patterns/paper-fibers.png");
+      border-right: 2px solid #cbb994;
+      box-shadow: 3px 0 6px rgba(0,0,0,0.2);
+      transition: transform 0.3s ease;
+      z-index: 1000;
+      padding: 15px;
+      overflow-y: auto;
+    }
+    #sidebar.minimized { transform: translateX(-260px); }
+    #toggle-btn {
+      position: absolute;
+      top: 10px; left: 290px;
+      z-index: 1100;
+      background: #fdfaf5;
+      border: 1px solid #cbb994;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 6px 12px;
+      box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+      font-size: 18px;
+    }
+    h3 {
+      font-size: 22px;
+      margin-bottom: 15px;
+      border-bottom: 2px solid #cbb994;
+      padding-bottom: 5px;
+    }
+    button {
+      display: block;
+      width: 100%;
+      margin: 6px 0;
+      padding: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #e6dfd2;
+      border: 1px solid #cbb994;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover { background: #dcd2b8; }
+    .popup-content img {
+      max-width: 200px;
+      display: block;
+      margin-bottom: 5px;
+      border-radius: 4px;
+    }
+    .popup-content h3 {
+      font-size: 20px;
+      margin-bottom: 5px;
+    }
+    .popup-content p {
+      font-size: 13px;
+    }
+    .route-info {
+      margin-top: 15px;
+      padding: 10px;
+      background: #fffaf0;
+      border: 1px solid #cbb994;
+      border-radius: 6px;
+    }
+    .route-info h4 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    .route-info p {
+      font-size: 13px;
+      margin: 4px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h3>観光ルート選択</h3>
+    <button onclick="showRoute('route1')">ルート1: 天童駅→建勲神社→三宝寺→天童駅</button>
+    <button onclick="showRoute('route2')">ルート2: 天童駅→天童温泉→天童駅</button>
+    <button onclick="clearRoute()">ルートを消す</button>
+
+    <div id="route-details" class="route-info" style="display:none;">
+      <h4 id="route-title"></h4>
+      <p id="route-desc"></p>
+      <p><b>所要時間目安:</b> <span id="route-time"></span></p>
+    </div>
+  </div>
+  <div id="toggle-btn">≡</div>
+  <div id="map"></div>
+
+  <script>
+    // マップ初期化
+    const map = L.map('map').setView([38.353, 140.374], 14);
+
+    // タイルレイヤー追加
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '地図データ © OpenStreetMap contributors'
+    }).addTo(map);
+
+    // 各スポット情報（ローカル画像を使用）
+    const spots = {
+      "天童市役所": {
+        coords: [38.362083, 140.379082],
+        img: "images/siyakusyo.jpg",
+        desc: "天童市の行政の中心となる市役所です。"
+      },
+      "天童温泉": {
+        coords: [38.360015, 140.381643],
+        img: "images/onsen.jpg",
+        desc: "市街地に広がる歴史ある温泉地で、多くの宿泊施設があります。"
+      },
+      "建勲神社": {
+        coords: [38.355731, 140.374846],
+        img: "images/kenkun.jpg",
+        desc: "織田信長を祀る神社で、歴史的価値の高い神社です。"
+      },
+      "三宝寺": {
+        coords: [38.352704, 140.369262],
+        img: "images/sanpouji.jpg",
+        desc: "天童市内にある静かな寺院で、落ち着いた雰囲気を味わえます。"
+      },
+      "天童駅": {
+        coords: [38.359939, 140.369450],
+        img: "images/station.jpg",
+        desc: "山形新幹線も停車する天童市の玄関口です。"
+      }
+    };
+
+    // マーカー設置
+    Object.entries(spots).forEach(([name, spot]) => {
+      const popupContent = `
+        <div class="popup-content">
+          <h3>${name}</h3>
+          <img src="${spot.img}" alt="${name}" />
+          <p>${spot.desc}</p>
+        </div>`;
+      L.marker(spot.coords).bindPopup(popupContent).addTo(map);
+    });
+
+    // ルート情報
+    const routeData = {
+      route1: {
+        title: "ルート1: 天童駅→建勲神社→三宝寺→天童駅",
+        desc: "歴史と文化を巡る観光ルート。織田信長を祀る建勲神社と、静かな三宝寺を訪れます。",
+        time: "徒歩 約1時間30分",
+        coords: [
+          spots["天童駅"].coords,
+          spots["建勲神社"].coords,
+          spots["三宝寺"].coords,
+          spots["天童駅"].coords
+        ],
+        color: "blue"
+      },
+      route2: {
+        title: "ルート2: 天童駅→天童温泉→天童駅",
+        desc: "温泉でゆったりできるリフレッシュルート。観光後に温泉街でのんびりできます。",
+        time: "徒歩 約40分",
+        coords: [
+          spots["天童駅"].coords,
+          spots["天童温泉"].coords,
+          spots["天童駅"].coords
+        ],
+        color: "red"
+      }
+    };
+
+    let control = null;
+    let animatedLine = null;
+
+    // ルート表示
+    function showRoute(key) {
+      clearRoute();
+      const r = routeData[key];
+      control = L.Routing.control({
+        waypoints: r.coords.map(c => L.latLng(c[0], c[1])),
+        lineOptions: { styles: [{ color: r.color, weight: 5, opacity: 0.0 }] },
+        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
+        createMarker: () => null,
+        addWaypoints: false
+      }).addTo(map);
+
+      // サイドバーにルート情報表示
+      document.getElementById("route-title").innerText = r.title;
+      document.getElementById("route-desc").innerText = r.desc;
+      document.getElementById("route-time").innerText = r.time;
+      document.getElementById("route-details").style.display = "block";
+
+      // アニメーション & 地図の中心・ズーム調整
+      control.on("routesfound", function(e) {
+        const coords = e.routes[0].coordinates;
+        let index = 0;
+        animatedLine = L.polyline([], { color: r.color, weight: 5, opacity: 0.9 }).addTo(map);
+
+        // ルート全体を表示するように調整
+        map.fitBounds(L.polyline(coords).getBounds(), { padding: [50, 50] });
+
+        function drawStep() {
+          if (index < coords.length) {
+            animatedLine.addLatLng([coords[index].lat, coords[index].lng]);
+            index++;
+            requestAnimationFrame(drawStep);
+          }
+        }
+        drawStep();
+      });
+    }
+
+    // ルート削除
+    function clearRoute() {
+      if (control) {
+        map.removeControl(control);
+        control = null;
+      }
+      if (animatedLine) {
+        map.removeLayer(animatedLine);
+        animatedLine = null;
+      }
+      document.getElementById("route-details").style.display = "none";
+    }
+
+    // サイドバー開閉
+    const sidebar = document.getElementById("sidebar");
+    const toggleBtn = document.getElementById("toggle-btn");
+    toggleBtn.onclick = () => {
+      sidebar.classList.toggle("minimized");
+      toggleBtn.style.left = sidebar.classList.contains("minimized") ? "10px" : "290px";
+    };
+  </script>
+</body>
+</html>
